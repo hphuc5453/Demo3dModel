@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId "hphuc5453.demo_3d_model"
-        minSdkVersion 24
+        minSdkVersion 26
         targetSdkVersion 30
         versionCode 1
         versionName "1.0"
@@ -46,10 +46,6 @@ dependencies {
     implementation 'androidx.wear:wear:1.1.0'
     implementation 'com.google.android.support:wearable:2.8.1'
     compileOnly 'com.google.android.wearable:wearable:2.8.1'
-
-    // poly api
-    implementation 'com.github.kittinunf.fuel:fuel-android:1.13.0'
-    // process model 3d
-    implementation 'org.p5android:processing-core:4.0.1'
+    implementation 'commons-io:commons-io:2.5'
 
 }
