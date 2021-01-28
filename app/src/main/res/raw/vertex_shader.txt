@@ -1,6 +1,17 @@
-attribute vec4 position;
-uniform mat4 matrix;
 
-void main() {
-    gl_Position = matrix * position;
-}
+            uniform mat4 u_MVPMatrix; 					
+            uniform mat4 u_MVMatrix;					
+            attribute vec3 a_Normal; 				
+            attribute vec4 a_Position; 				
+            attribute vec2 a_TextureCoords;          
+            varying vec3 v_position;					
+            varying vec3 v_normal;					
+            varying vec2 v_TextureCoords;            
+            void main() 								
+            {v_TextureCoords = a_TextureCoords;       
+            v_position = vec3(u_MVMatrix * a_Position);    
+            v_normal = vec3(u_MVMatrix * vec4(a_Normal, 0.0));        
+            gl_Position = u_MVPMatrix * a_Position;  
+            } 										
+            
+            
