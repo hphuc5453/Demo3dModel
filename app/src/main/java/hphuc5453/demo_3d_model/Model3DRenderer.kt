@@ -52,12 +52,14 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
     private var mProgramHandle = 0
     private var mPointProgramHandle = 0
     private var mTextureDataHandle = 0
-
-
+    /** Store the current rotation.  */
+    private val mCurrentRotation = FloatArray(16)
     /**
      * Stores a copy of the model matrix specifically for the light position.
      */
     private val mLightModelMatrix = FloatArray(16)
+    /** A temporary matrix.  */
+    private val mTemporaryMatrix = FloatArray(16)
 
     private var verticesPBuffer = 0
     private var verticesNBuffer = 0
@@ -85,10 +87,9 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
     /** These are handles to our texture data.  */
     private var mBrickDataHandle = 0
     private var mGrassDataHandle = 0
+    /** Store the accumulated rotation.  */
+    private val mAccumulatedRotation = FloatArray(16)
 
-    /** Temporary place to save the min and mag filter, in case the activity was restarted.  */
-    private val mQueuedMinFilter = 0
-    private val mQueuedMagFilter = 0
     // These still work without volatile, but refreshes are not guaranteed to happen.
     @Volatile
     var mDeltaX = 0f
@@ -135,64 +136,32 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
         this.loader?.parseObject("model_triangulated.obj")
     }
 
-    private var enableBlending = false
-    fun switchMode(){
-        enableBlending = !enableBlending
-        if(enableBlending){
-            // No culling of back faces
-            GLES20.glDisable(GLES20.GL_CULL_FACE)
-            // No depth testing
-            GLES20.glDisable(GLES20.GL_DEPTH_TEST)
-            // Enable blending
-            GLES20.glEnable(GLES20.GL_BLEND)
-            GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE)
-        }else{
-            // Cull back faces
-            GLES20.glEnable(GLES20.GL_CULL_FACE)
-            // Enable depth testing
-            GLES20.glEnable(GLES20.GL_DEPTH_TEST)
-            // Disable blending
-            GLES20.glDisable(GLES20.GL_BLEND)
-        }
-    }
-
     override fun onDrawFrame(gl: GL10?) {
         if (mProgramHandle != 0) {
             GLES20.glUseProgram(mProgramHandle)
         } else {
             throw RuntimeException("Program isn't valid")
         }
+        GLES20.glClear(GLES20.GL_DEPTH_BUFFER_BIT or GLES20.GL_COLOR_BUFFER_BIT)
+        GLES20.glClearColor(0.5f, 0.5f, 0.5f, 0.5f)
+
         // Do a complete rotation every 10 seconds.
         val time = SystemClock.uptimeMillis() % 10000L
         val angleInDegrees = 360.0f / 10000.0f * time.toInt()
 
         mPositionHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_Position")
         mNormalHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_Normal")
-        mTextureCoordsHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_TextureCoords")
+        mTextureCoordsHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_TexCoordinate")
         mTextureUniformHandle = GLES20.glGetUniformLocation(mProgramHandle, "u_Texture")
         mMVPMatrixHandle = GLES20.glGetUniformLocation(mProgramHandle, "u_MVPMatrix")
         mMVMatrixHandle = GLES20.glGetUniformLocation(mProgramHandle, "u_MVMatrix")
-        mLightPosHandle = GLES20.glGetUniformLocation(mProgramHandle, "lightPos")
+        mLightPosHandle = GLES20.glGetUniformLocation(mProgramHandle, "u_LightPos")
 
-        GLES20.glClear(GLES20.GL_DEPTH_BUFFER_BIT or GLES20.GL_COLOR_BUFFER_BIT)
-
-        GLES20.glClearColor(0.5f, 0.5f, 0.5f, 0.5f)
-        // Set the active texture unit to texture unit 0.
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        // Bind the texture to this unit.
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mBrickDataHandle)
-        GLES20.glUniform1i(mTextureUniformHandle, 0)
-        // Set the active texture unit to texture unit 0.
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        // Bind the texture to this unit.
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mGrassDataHandle)
-        // Tell the texture uniform sampler to use this texture in the shader by binding to texture unit 0.
-        GLES20.glUniform1i(mTextureUniformHandle, 0)
-
+        // Calculate position of the light. Rotate and then push into the distance.
         Matrix.setIdentityM(mLightModelMatrix, 0)
-        Matrix.translateM(mLightModelMatrix, 0, 0.0f, 0.0f, 2.0f)
+        Matrix.translateM(mLightModelMatrix, 0, 0.0f, 0.0f, -2.0f)
         Matrix.rotateM(mLightModelMatrix, 0, angleInDegrees, 0.0f, 1.0f, 0.0f)
-        Matrix.translateM(mLightModelMatrix, 0, 0.0f, 0.0f, 2.0f)
+        Matrix.translateM(mLightModelMatrix, 0, 0.0f, 0.0f, 3.5f)
 
         Matrix.multiplyMV(
             mLightPosInWorldSpace,
@@ -210,9 +179,56 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
             mLightPosInWorldSpace,
             0
         )
+
         // Draw the triangle facing straight on.
         Matrix.setIdentityM(mModelMatrix, 0)
-        Matrix.rotateM(mModelMatrix, 0, angleInDegrees, 0.0f, 10.0f, 2.0f)
+        Matrix.translateM(mModelMatrix, 0, 0.0f, 0.8f, -1.5f)
+//        Matrix.rotateM(mModelMatrix, 0, angleInDegrees, 0.0f, 10.0f, 2.0f)
+
+        // Set a matrix that contains the current rotation.
+        Matrix.setIdentityM(mCurrentRotation, 0)
+        Matrix.rotateM(mCurrentRotation, 0, mDeltaX, 0.0f, 1.0f, 0.0f)
+        Matrix.rotateM(mCurrentRotation, 0, mDeltaY, 1.0f, 0.0f, 0.0f)
+        mDeltaX = 0.0f
+        mDeltaY = 0.0f
+
+        // Multiply the current rotation by the accumulated rotation, and then set the accumulated rotation to the result.
+        Matrix.multiplyMM(
+            mTemporaryMatrix,
+            0,
+            mCurrentRotation,
+            0,
+            mAccumulatedRotation,
+            0
+        )
+        System.arraycopy(mTemporaryMatrix, 0, mAccumulatedRotation, 0, 16)
+        // Rotate the cube taking the overall rotation into account.
+        Matrix.multiplyMM(
+            mTemporaryMatrix,
+            0,
+            mModelMatrix,
+            0,
+            mAccumulatedRotation,
+            0
+        )
+        System.arraycopy(mTemporaryMatrix, 0, mModelMatrix, 0, 16)
+
+        // Set the active texture unit to texture unit 0.
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        // Bind the texture to this unit.
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mBrickDataHandle)
+        GLES20.glUniform1i(mTextureUniformHandle, 0)
+
+        // Set the active texture unit to texture unit 0.
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        // Bind the texture to this unit.
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mGrassDataHandle)
+        // Tell the texture uniform sampler to use this texture in the shader by binding to texture unit 0.
+        GLES20.glUniform1i(mTextureUniformHandle, 0)
+
+
+
+
         drawModel()
         // Draw a point to indicate the light.
         GLES20.glUseProgram(mPointProgramHandle)
@@ -315,7 +331,7 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
         mProgramHandle = helper!!.createAndLinkProgram(
             vertexShaderHandle, fragmentShaderHandle, arrayOf(
                 "a_Position", "a_Normal",
-                "a_TextureCoords"
+                "a_TexCoordinate"
             )
         )
         val pointVertexShaderHandle: Int =
@@ -327,7 +343,7 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
             pointFragmentShaderHandle,
             arrayOf("a_Position")
         )
-        // Load the texture
+//        // Load the texture
         mBrickDataHandle =
             helper!!.loadTexture(context!!, R.drawable.metal)
         GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D)
@@ -335,9 +351,9 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
         mGrassDataHandle =
             helper!!.loadTexture(context!!, R.drawable.noisy_grass_public_domain)
         GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D)
-//        mTextureDataHandle = helper!!.loadTexture(context!!, R.drawable.metal)
-//        GLES20.glEnable(GLES20.GL_CULL_FACE)
-//        GLES20.glEnable(GLES20.GL_DEPTH_TEST)
+
+        // Initialize the accumulated rotation matrix
+        Matrix.setIdentityM(mAccumulatedRotation, 0)
     }
 
     private fun drawLight() {
@@ -355,7 +371,8 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
         GLES20.glDisableVertexAttribArray(pointPositionHandle)
         // Pass in the transformation matrix.
         Matrix.multiplyMM(mMVPMatrix, 0, mViewMatrix, 0, mLightModelMatrix, 0)
-        Matrix.multiplyMM(mMVPMatrix, 0, mProjectionMatrix, 0, mMVPMatrix, 0)
+        Matrix.multiplyMM(mTemporaryMatrix, 0, mProjectionMatrix, 0, mMVPMatrix, 0)
+        System.arraycopy(mTemporaryMatrix, 0, mMVPMatrix, 0, 16)
         GLES20.glUniformMatrix4fv(pointMVPMatrixHandle, 1, false, mMVPMatrix, 0)
         // Draw the point.
         GLES20.glDrawArrays(GLES20.GL_POINTS, 0, 1)
@@ -387,6 +404,10 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
         Matrix.multiplyMM(mMVPMatrix, 0, mProjectionMatrix, 0, mMVMatrix, 0)
         GLES20.glUniformMatrix4fv(mMVMatrixHandle, 1, false, mMVMatrix, 0)
         GLES20.glUniformMatrix4fv(mMVPMatrixHandle, 1, false, mMVPMatrix, 0)
+        // This multiplies the modelview matrix by the projection matrix, and stores the result in the MVP matrix
+        // (which now contains model * view * projection).
+        Matrix.multiplyMM(mTemporaryMatrix, 0, mProjectionMatrix, 0, mMVPMatrix, 0)
+        System.arraycopy(mTemporaryMatrix, 0, mMVPMatrix, 0, 16)
 //         Pass in the light position in eye space.
         GLES20.glUniform3f(
             mLightPosHandle,

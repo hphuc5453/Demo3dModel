@@ -33,27 +33,19 @@ class MainActivity : AppCompatActivity() {
         if(supportsEs2){
             val loader = Model3DLoader(assets)
             val render = Model3DRenderer(this, loader)
-
             val displayMetrics = DisplayMetrics()
             windowManager.defaultDisplay.getMetrics(displayMetrics)
 
-            mglView = Model3DSurfaceView(this, render, displayMetrics.density)
+            mglView = Model3DSurfaceView(this)
             if(isProbablyEmulator()){
                 mglView.setEGLConfigChooser(8, 8, 8, 8, 16, 0)
             }
             mglView.setEGLContextClientVersion(2)
             mglView.preserveEGLContextOnPause = true
-            mglView.setRenderer(render)
+            mglView.setRender(render, displayMetrics.density)
             renderSet = true
         }
         setContentView(mglView)
-    }
-
-    private fun hasGLES20(): Boolean {
-        val am =
-            getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val info = am.deviceConfigurationInfo
-        return info.reqGlEsVersion >= 0x20000
     }
 
     private fun isProbablyEmulator(): Boolean {
