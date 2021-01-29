@@ -143,7 +143,6 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
             throw RuntimeException("Program isn't valid")
         }
         GLES20.glClear(GLES20.GL_DEPTH_BUFFER_BIT or GLES20.GL_COLOR_BUFFER_BIT)
-        GLES20.glClearColor(0.5f, 0.5f, 0.5f, 0.5f)
 
         // Do a complete rotation every 10 seconds.
         val time = SystemClock.uptimeMillis() % 10000L
@@ -226,9 +225,6 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
         // Tell the texture uniform sampler to use this texture in the shader by binding to texture unit 0.
         GLES20.glUniform1i(mTextureUniformHandle, 0)
 
-
-
-
         drawModel()
         // Draw a point to indicate the light.
         GLES20.glUseProgram(mPointProgramHandle)
@@ -251,6 +247,7 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        GLES20.glClearColor(0.5f, 0.5f, 0.5f, 1f)
         // Use culling to remove back faces.
         GLES20.glEnable(GLES20.GL_CULL_FACE)
         // Enable depth testing
