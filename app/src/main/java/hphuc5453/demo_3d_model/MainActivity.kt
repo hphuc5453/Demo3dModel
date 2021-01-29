@@ -2,9 +2,9 @@ package hphuc5453.demo_3d_model
 
 import android.app.ActivityManager
 import android.content.Context
-import android.opengl.GLSurfaceView
 import android.os.Build
 import android.os.Bundle
+import android.util.DisplayMetrics
 import android.view.Window
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
@@ -12,7 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
 
-    lateinit var mglView : GLSurfaceView
+    lateinit var mglView : Model3DSurfaceView
     private var renderSet = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,14 +31,19 @@ class MainActivity : AppCompatActivity() {
             configurationInfo.reqGlEsVersion >= 0x20000 || isProbablyEmulator()
 
         if(supportsEs2){
-            mglView = GLSurfaceView(this)
+            val loader = Model3DLoader(assets)
+            val render = Model3DRenderer(this, loader)
+
+            val displayMetrics = DisplayMetrics()
+            windowManager.defaultDisplay.getMetrics(displayMetrics)
+
+            mglView = Model3DSurfaceView(this, render, displayMetrics.density)
             if(isProbablyEmulator()){
                 mglView.setEGLConfigChooser(8, 8, 8, 8, 16, 0)
             }
             mglView.setEGLContextClientVersion(2)
             mglView.preserveEGLContextOnPause = true
-            val loader = Model3DLoader(assets)
-            mglView.setRenderer(Model3DRenderer(this, loader))
+            mglView.setRenderer(render)
             renderSet = true
         }
         setContentView(mglView)

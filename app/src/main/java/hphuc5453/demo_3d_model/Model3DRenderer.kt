@@ -4,6 +4,7 @@ import android.content.Context
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
+import android.os.SystemClock
 import org.apache.commons.io.IOUtils
 import java.nio.charset.Charset
 import javax.microedition.khronos.egl.EGLConfig
@@ -81,6 +82,20 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
 
     private var helper: GLHelper? = null
 
+    /** These are handles to our texture data.  */
+    private var mBrickDataHandle = 0
+    private var mGrassDataHandle = 0
+
+    /** Temporary place to save the min and mag filter, in case the activity was restarted.  */
+    private val mQueuedMinFilter = 0
+    private val mQueuedMagFilter = 0
+    // These still work without volatile, but refreshes are not guaranteed to happen.
+    @Volatile
+    var mDeltaX = 0f
+
+    @Volatile
+    var mDeltaY = 0f
+
     private fun getPointVertexShader(): String {
         val input = context?.resources?.openRawResource(R.raw.point_vertex_shader)
         val code = IOUtils.toString(input, Charset.defaultCharset())
@@ -117,7 +132,28 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
         vertexShader = getVertexShader()
         fragmentShader = getFragmentShader()
         helper = GLHelper()
-        this.loader?.parseObject("penguin.obj")
+        this.loader?.parseObject("model_triangulated.obj")
+    }
+
+    private var enableBlending = false
+    fun switchMode(){
+        enableBlending = !enableBlending
+        if(enableBlending){
+            // No culling of back faces
+            GLES20.glDisable(GLES20.GL_CULL_FACE)
+            // No depth testing
+            GLES20.glDisable(GLES20.GL_DEPTH_TEST)
+            // Enable blending
+            GLES20.glEnable(GLES20.GL_BLEND)
+            GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE)
+        }else{
+            // Cull back faces
+            GLES20.glEnable(GLES20.GL_CULL_FACE)
+            // Enable depth testing
+            GLES20.glEnable(GLES20.GL_DEPTH_TEST)
+            // Disable blending
+            GLES20.glDisable(GLES20.GL_BLEND)
+        }
     }
 
     override fun onDrawFrame(gl: GL10?) {
@@ -126,6 +162,10 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
         } else {
             throw RuntimeException("Program isn't valid")
         }
+        // Do a complete rotation every 10 seconds.
+        val time = SystemClock.uptimeMillis() % 10000L
+        val angleInDegrees = 360.0f / 10000.0f * time.toInt()
+
         mPositionHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_Position")
         mNormalHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_Normal")
         mTextureCoordsHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_TextureCoords")
@@ -137,15 +177,21 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
         GLES20.glClear(GLES20.GL_DEPTH_BUFFER_BIT or GLES20.GL_COLOR_BUFFER_BIT)
 
         GLES20.glClearColor(0.5f, 0.5f, 0.5f, 0.5f)
-        // Set program handles. These will later be used to pass in values to the program.
         // Set the active texture unit to texture unit 0.
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         // Bind the texture to this unit.
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mTextureDataHandle)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mBrickDataHandle)
+        GLES20.glUniform1i(mTextureUniformHandle, 0)
+        // Set the active texture unit to texture unit 0.
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        // Bind the texture to this unit.
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mGrassDataHandle)
         // Tell the texture uniform sampler to use this texture in the shader by binding to texture unit 0.
         GLES20.glUniform1i(mTextureUniformHandle, 0)
 
         Matrix.setIdentityM(mLightModelMatrix, 0)
+        Matrix.translateM(mLightModelMatrix, 0, 0.0f, 0.0f, 2.0f)
+        Matrix.rotateM(mLightModelMatrix, 0, angleInDegrees, 0.0f, 1.0f, 0.0f)
         Matrix.translateM(mLightModelMatrix, 0, 0.0f, 0.0f, 2.0f)
 
         Matrix.multiplyMV(
@@ -166,7 +212,7 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
         )
         // Draw the triangle facing straight on.
         Matrix.setIdentityM(mModelMatrix, 0)
-        Matrix.rotateM(mModelMatrix, 0, 330.0f, 1.0f, 20.0f, 1.0f)
+        Matrix.rotateM(mModelMatrix, 0, angleInDegrees, 0.0f, 10.0f, 2.0f)
         drawModel()
         // Draw a point to indicate the light.
         GLES20.glUseProgram(mPointProgramHandle)
@@ -189,6 +235,9 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        // Use culling to remove back faces.
+        GLES20.glEnable(GLES20.GL_CULL_FACE)
+        // Enable depth testing
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
         //generate the VBOS and IBOS for the vertices and indices
         val buffers = IntArray(4)
@@ -278,9 +327,17 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
             pointFragmentShaderHandle,
             arrayOf("a_Position")
         )
-        mTextureDataHandle = helper!!.loadTexture(context!!, R.drawable.metal)
-        GLES20.glEnable(GLES20.GL_CULL_FACE)
-        GLES20.glEnable(GLES20.GL_DEPTH_TEST)
+        // Load the texture
+        mBrickDataHandle =
+            helper!!.loadTexture(context!!, R.drawable.metal)
+        GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D)
+
+        mGrassDataHandle =
+            helper!!.loadTexture(context!!, R.drawable.noisy_grass_public_domain)
+        GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D)
+//        mTextureDataHandle = helper!!.loadTexture(context!!, R.drawable.metal)
+//        GLES20.glEnable(GLES20.GL_CULL_FACE)
+//        GLES20.glEnable(GLES20.GL_DEPTH_TEST)
     }
 
     private fun drawLight() {
