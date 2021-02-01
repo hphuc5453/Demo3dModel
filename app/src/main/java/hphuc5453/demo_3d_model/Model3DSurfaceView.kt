@@ -11,6 +11,7 @@ class Model3DSurfaceView(context: Context) :
 
     private var render: Model3DRenderer? = null
 
+
     fun setRender(render: Model3DRenderer, destiny: Float){
         this.render = render
         this.mDensity = destiny
@@ -21,6 +22,7 @@ class Model3DSurfaceView(context: Context) :
     private var mPreviousY = 0f
 
     private var mDensity = 0f
+
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent?): Boolean {
@@ -35,16 +37,24 @@ class Model3DSurfaceView(context: Context) :
 //                    }
 //                }
                 MotionEvent.ACTION_MOVE -> {
-                    val deltaX = (x - mPreviousX) / mDensity / 2f
-                    val deltaY = (y - mPreviousY) / mDensity / 2f
-                    if (render != null) {
-                        render!!.mDeltaX += deltaX
-                        render!!.mDeltaY += deltaY
+                    var deltaX = x - mPreviousX
+                    var deltaY = y - mPreviousY
+                    if(y > height / 2){
+                        deltaX *= -1
                     }
-                    mPreviousX = x
-                    mPreviousY = y
+                    if(x > width / 2){
+                        deltaY *= -1
+                    }
+                    if (render != null) {
+                        render!!.mDeltaX += ((deltaX * AppConstants.TOUCH_SCALE_FACTOR) + 360) % 360
+                        render!!.mDeltaY += ((deltaY * AppConstants.TOUCH_SCALE_FACTOR) + 360) % 360
+                    }
+
                 }
             }
+            requestRender()
+            mPreviousX = x
+            mPreviousY = y
             return true
         } else {
             return super.onTouchEvent(event)

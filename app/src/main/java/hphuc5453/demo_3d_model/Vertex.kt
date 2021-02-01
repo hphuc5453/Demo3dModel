@@ -9,6 +9,6 @@ class Vertex {
     var normalY = 0f
     var normalZ = 0f
 
-    var texture1 = 0f
-    var texture2 = 0f
+    var textureU = 0f
+    var textureV = 0f
 }

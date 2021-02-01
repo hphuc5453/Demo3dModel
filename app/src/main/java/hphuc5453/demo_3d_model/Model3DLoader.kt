@@ -1,6 +1,10 @@
 package hphuc5453.demo_3d_model
 
 import android.content.res.AssetManager
+import hphuc5453.demo_3d_model.AppConstants.Companion.FACE
+import hphuc5453.demo_3d_model.AppConstants.Companion.NORMAL
+import hphuc5453.demo_3d_model.AppConstants.Companion.TEXTURE
+import hphuc5453.demo_3d_model.AppConstants.Companion.VERTEX
 import java.io.BufferedReader
 import java.io.IOException
 import java.io.InputStreamReader
@@ -11,22 +15,21 @@ import java.nio.ShortBuffer
 import java.util.*
 
 class Model3DLoader(assetManager: AssetManager) {
-    private val VERTEX = "v "
-    private val FACE = "f"
-    private val TEXTURE = "vt"
-    private val NORMAL = "vn"
 
     private var fileReader: BufferedReader? = null
     private var vertices: FloatArray? = null
     private var indicesVertices: ShortArray? = null
     private var normals: FloatArray? = null
     private var colors: FloatArray? = null
+
     private val vPositions = ArrayList<Float>()
     private val vNormals = ArrayList<Float>()
     private val vColors = ArrayList<Float>()
+
     private val iPositions = ArrayList<Short>()
     private val iNormals = ArrayList<Short>()
     private val iColors = ArrayList<Short>()
+
     private val deIndexedVertices: ArrayList<Vertex> = ArrayList()
     private val indices = ArrayList<Short>()
     private var scanner: StringTokenizer? = null
@@ -81,12 +84,16 @@ class Model3DLoader(assetManager: AssetManager) {
             vertex.positionX = vPositions[iPositions[i].toInt() * 3]
             vertex.positionY = vPositions[iPositions[i].toInt() * 3 + 1]
             vertex.positionZ = vPositions[iPositions[i].toInt() * 3 + 2]
+
+            vertex.normalX = vNormals[iNormals[i].toInt() * 3]
             vertex.normalY = vNormals[iNormals[i].toInt() * 3 + 1]
             vertex.normalZ = vNormals[iNormals[i].toInt() * 3 + 2]
-            if (!typeFaceWithTwoValue) {
-                vertex.texture1 = vColors[iColors[i].toInt() * 2]
-                vertex.texture2 = vColors[iColors[i].toInt() * 2 + 1]
+
+            if (iColors.isNotEmpty()) {
+                vertex.textureU = vColors[iColors[i].toInt() * 2]
+                vertex.textureV = vColors[iColors[i].toInt() * 2 + 1]
             }
+
             var isContained = false
             var index = 0 //if the deIndexedVertices contains the vertex, then
             //we can simply take the index of where it is and
@@ -106,7 +113,7 @@ class Model3DLoader(assetManager: AssetManager) {
                 maxIndex++
             } else {
                 //The vertex is contained, and all we need to do is
-                //add the index of it to the indices arraylist.
+                //add the index of it to the indices array list.
                 indices.add(index.toShort())
             }
         }
@@ -124,8 +131,8 @@ class Model3DLoader(assetManager: AssetManager) {
             normals!![positionCount] = deIndexedVertices[i].normalX
             normals!![positionCount + 1] = deIndexedVertices[i].normalY
             normals!![positionCount + 2] = deIndexedVertices[i].normalZ
-            colors!![colorCount] = deIndexedVertices[i].texture1
-            colors!![colorCount + 1] = deIndexedVertices[i].texture2
+            colors!![colorCount] = deIndexedVertices[i].textureU
+            colors!![colorCount + 1] = deIndexedVertices[i].textureV
             positionCount += 3
             colorCount += 2
         }
@@ -210,13 +217,6 @@ class Model3DLoader(assetManager: AssetManager) {
         }
     }
 
-    /**
-     * Parses the string for the vertex colors and adds them to the
-     * color array
-     * @param face
-     */
-    private var typeFaceWithTwoValue = false
-    private var isFirstRead = false
     private fun processFace(face: String?) {
         val strAr: Array<String>? = face?.replace("f", "")?.trim()?.split(" ")?.toTypedArray()
         val isDouble = strAr!![0].contains("//")
@@ -224,10 +224,6 @@ class Model3DLoader(assetManager: AssetManager) {
             for (s in strAr) {
                 val cornerAr = s.split("//".toRegex()).toTypedArray()
                 if (cornerAr.size == 2) {
-                    if(!isFirstRead){
-                        typeFaceWithTwoValue = true
-                        isFirstRead = true
-                    }
                     iPositions.add((cornerAr[0].trim { it <= ' ' }.toInt() - 1).toShort())
                     iNormals.add((cornerAr[1].trim { it <= ' ' }.toInt() - 1).toShort())
                 } else {
@@ -240,12 +236,8 @@ class Model3DLoader(assetManager: AssetManager) {
             for (s in strAr) {
                 val cornerAr = s.split("/".toRegex()).toTypedArray()
                 if (cornerAr.size == 2) {
-                    if(!isFirstRead){
-                        typeFaceWithTwoValue = true
-                        isFirstRead = true
-                    }
                     iPositions.add((cornerAr[0].trim { it <= ' ' }.toInt() - 1).toShort())
-                    iNormals.add((cornerAr[1].trim { it <= ' ' }.toInt() - 1).toShort())
+                    iColors.add((cornerAr[1].trim { it <= ' ' }.toInt() - 1).toShort())
                 } else {
                     iPositions.add((cornerAr[0].trim { it <= ' ' }.toInt() - 1).toShort())
                     iColors.add((cornerAr[1].trim { it <= ' ' }.toInt() - 1).toShort())

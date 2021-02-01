@@ -4,7 +4,6 @@ import android.content.Context
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
-import android.os.SystemClock
 import org.apache.commons.io.IOUtils
 import java.nio.charset.Charset
 import javax.microedition.khronos.egl.EGLConfig
@@ -51,7 +50,6 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
 
     private var mProgramHandle = 0
     private var mPointProgramHandle = 0
-    private var mTextureDataHandle = 0
     /** Store the current rotation.  */
     private val mCurrentRotation = FloatArray(16)
     /**
@@ -85,8 +83,7 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
     private var helper: GLHelper? = null
 
     /** These are handles to our texture data.  */
-    private var mBrickDataHandle = 0
-    private var mGrassDataHandle = 0
+    private var mTextureColorDataHandle = 0
     /** Store the accumulated rotation.  */
     private val mAccumulatedRotation = FloatArray(16)
 
@@ -133,7 +130,7 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
         vertexShader = getVertexShader()
         fragmentShader = getFragmentShader()
         helper = GLHelper()
-        this.loader?.parseObject("model_triangulated.obj")
+        this.loader?.parseObject("penguin.obj")
     }
 
     override fun onDrawFrame(gl: GL10?) {
@@ -144,23 +141,12 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
         }
         GLES20.glClear(GLES20.GL_DEPTH_BUFFER_BIT or GLES20.GL_COLOR_BUFFER_BIT)
 
-        // Do a complete rotation every 10 seconds.
-        val time = SystemClock.uptimeMillis() % 10000L
-        val angleInDegrees = 360.0f / 10000.0f * time.toInt()
-
         mPositionHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_Position")
         mNormalHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_Normal")
         mTextureCoordsHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_TexCoordinate")
-        mTextureUniformHandle = GLES20.glGetUniformLocation(mProgramHandle, "u_Texture")
         mMVPMatrixHandle = GLES20.glGetUniformLocation(mProgramHandle, "u_MVPMatrix")
         mMVMatrixHandle = GLES20.glGetUniformLocation(mProgramHandle, "u_MVMatrix")
         mLightPosHandle = GLES20.glGetUniformLocation(mProgramHandle, "u_LightPos")
-
-        // Calculate position of the light. Rotate and then push into the distance.
-        Matrix.setIdentityM(mLightModelMatrix, 0)
-        Matrix.translateM(mLightModelMatrix, 0, 0.0f, 0.0f, -2.0f)
-        Matrix.rotateM(mLightModelMatrix, 0, angleInDegrees, 0.0f, 1.0f, 0.0f)
-        Matrix.translateM(mLightModelMatrix, 0, 0.0f, 0.0f, 3.5f)
 
         Matrix.multiplyMV(
             mLightPosInWorldSpace,
@@ -215,20 +201,23 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
         // Set the active texture unit to texture unit 0.
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         // Bind the texture to this unit.
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mBrickDataHandle)
-        GLES20.glUniform1i(mTextureUniformHandle, 0)
-
-        // Set the active texture unit to texture unit 0.
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        // Bind the texture to this unit.
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mGrassDataHandle)
-        // Tell the texture uniform sampler to use this texture in the shader by binding to texture unit 0.
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mTextureColorDataHandle)
         GLES20.glUniform1i(mTextureUniformHandle, 0)
 
         drawModel()
         // Draw a point to indicate the light.
         GLES20.glUseProgram(mPointProgramHandle)
-        drawLight()
+
+        // Calculate position of the light. Rotate and then push into the distance.
+        // Do a complete rotation every 10 seconds.
+//        val time = SystemClock.uptimeMillis() % 10000L
+//        val angleInDegrees = 360.0f / 10000.0f * time.toInt()
+
+//        Matrix.setIdentityM(mLightModelMatrix, 0)
+//        Matrix.translateM(mLightModelMatrix, 0, 0.0f, 0.0f, -2.0f)
+//        Matrix.rotateM(mLightModelMatrix, 0, angleInDegrees, 0.0f, 1.0f, 0.0f)
+//        Matrix.translateM(mLightModelMatrix, 0, 0.0f, 0.0f, 3.5f)
+//        drawLight()
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -340,13 +329,9 @@ class Model3DRenderer(context: Context, loader: Model3DLoader) : GLSurfaceView.R
             pointFragmentShaderHandle,
             arrayOf("a_Position")
         )
-//        // Load the texture
-        mBrickDataHandle =
+        // Load the texture
+        mTextureColorDataHandle =
             helper!!.loadTexture(context!!, R.drawable.metal)
-        GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D)
-
-        mGrassDataHandle =
-            helper!!.loadTexture(context!!, R.drawable.noisy_grass_public_domain)
         GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D)
 
         // Initialize the accumulated rotation matrix
